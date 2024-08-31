@@ -39,6 +39,8 @@ const (
 	DEFAULT_PASSWORD_FILE = "~/.secrets/.keymaster_password"
 )
 
+const version = "0.0.1"
+
 var cfgFile string
 var verbose bool
 var issuer string
