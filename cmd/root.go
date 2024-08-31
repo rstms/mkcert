@@ -46,6 +46,9 @@ var passwordFile string
 var certFile string
 var keyFile string
 var duration string
+var typeRSA bool
+var typeEC bool
+var typeED bool
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -86,7 +89,21 @@ Create a client certificate signed by the Reliance Systems Keymaster CA
 		if duration != "" {
 			cmdArgs = append(cmdArgs, fmt.Sprintf("--not-after=%s", duration))
 		}
+
+		var typeOption string
+		switch {
+		case typeEC:
+			typeOption = "--kty=EC"
+		case typeED:
+			typeOption = "--kty=OKP"
+		default:
+			typeOption = "--kty=RSA"
+		}
+
+		cmdArgs = append(cmdArgs, typeOption)
+
 		cmdArgs = append(cmdArgs, stepArgs...)
+
 		if verbose {
 			fmt.Fprintf(os.Stderr, "%s %s\n", "step", strings.Join(cmdArgs, " "))
 		}
@@ -124,6 +141,12 @@ func init() {
 	rootCmd.Flags().StringVarP(&duration, "duration", "d", "", "duration to expiration: valid units are: ns,us,ms,s,m,h,d,y")
 	rootCmd.Flags().StringVarP(&certFile, "cert-file", "c", "", "new certificate filename")
 	rootCmd.Flags().StringVarP(&keyFile, "key-file", "k", "", "new key filename")
+	rootCmd.Flags().BoolVarP(&typeRSA, "rsa", "r", false, "RSA key type (default) [choose one]")
+	rootCmd.Flags().BoolVarP(&typeEC, "ecurve", "E", false, "Elliptic Curve key type [choose one]")
+	rootCmd.Flags().BoolVarP(&typeED, "ed25519", "e", false, "ed25519 key type [choose one]")
+	rootCmd.MarkFlagsMutuallyExclusive("rsa", "ecurve")
+	rootCmd.MarkFlagsMutuallyExclusive("rsa", "ed25519")
+	rootCmd.MarkFlagsMutuallyExclusive("ecurve", "ed25519")
 }
 
 // initConfig reads in config file and ENV variables if set.
