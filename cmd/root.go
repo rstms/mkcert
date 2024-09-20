@@ -51,6 +51,7 @@ var duration string
 var typeRSA bool
 var typeEC bool
 var typeED bool
+var rootCA bool
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -58,61 +59,67 @@ var rootCmd = &cobra.Command{
 	Short: "make client certificate",
 	Long: `
 Create a client certificate signed by the Reliance Systems Keymaster CA
+The --rootCA flag writes the root CA cert to a file named by SUBJECT.
 `,
 	Args: cobra.MinimumNArgs(1),
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
-		subjectName := args[0]
-		stepArgs := args[1:]
-		passwordFile, err := resolveTildePath(passwordFile)
-		cobra.CheckErr(err)
-		if certFile == "" {
-			certFile = fmt.Sprintf("%s.pem", subjectName)
-		}
-		if keyFile == "" {
-			keyFile = fmt.Sprintf("%s.key", subjectName)
-		}
-		cmdArgs := []string{"ca", "certificate", subjectName, certFile, keyFile}
-		cmdArgs = append(cmdArgs, fmt.Sprintf("--issuer=%s", issuer))
-		cmdArgs = append(cmdArgs, fmt.Sprintf("--provisioner-password-file=%s", passwordFile))
 
-		switch {
-		case duration == "":
-		case strings.HasSuffix(duration, "y") || strings.HasSuffix(duration, "d"):
-			d, err := expirationDate(duration)
+		cmdArgs := []string{}
+		if rootCA {
+			cmdArgs = []string{"ca", "root", "-f", args[0]}
+		} else {
+			subjectName := args[0]
+			stepArgs := args[1:]
+			passwordFile, err := resolveTildePath(passwordFile)
 			cobra.CheckErr(err)
-			duration = d
-		default:
-			d, err := time.ParseDuration(duration)
-			cobra.CheckErr(err)
-			duration = d.String()
+			if certFile == "" {
+				certFile = fmt.Sprintf("%s.pem", subjectName)
+			}
+			if keyFile == "" {
+				keyFile = fmt.Sprintf("%s.key", subjectName)
+			}
+			cmdArgs = []string{"ca", "certificate", subjectName, certFile, keyFile}
+			cmdArgs = append(cmdArgs, fmt.Sprintf("--issuer=%s", issuer))
+			cmdArgs = append(cmdArgs, fmt.Sprintf("--provisioner-password-file=%s", passwordFile))
+
+			switch {
+			case duration == "":
+			case strings.HasSuffix(duration, "y") || strings.HasSuffix(duration, "d"):
+				d, err := expirationDate(duration)
+				cobra.CheckErr(err)
+				duration = d
+			default:
+				d, err := time.ParseDuration(duration)
+				cobra.CheckErr(err)
+				duration = d.String()
+			}
+			if duration != "" {
+				cmdArgs = append(cmdArgs, fmt.Sprintf("--not-after=%s", duration))
+			}
+
+			var typeOption string
+			switch {
+			case typeEC:
+				typeOption = "--kty=EC"
+			case typeED:
+				typeOption = "--kty=OKP"
+			default:
+				typeOption = "--kty=RSA"
+			}
+
+			cmdArgs = append(cmdArgs, typeOption)
+
+			cmdArgs = append(cmdArgs, stepArgs...)
 		}
-		if duration != "" {
-			cmdArgs = append(cmdArgs, fmt.Sprintf("--not-after=%s", duration))
-		}
-
-		var typeOption string
-		switch {
-		case typeEC:
-			typeOption = "--kty=EC"
-		case typeED:
-			typeOption = "--kty=OKP"
-		default:
-			typeOption = "--kty=RSA"
-		}
-
-		cmdArgs = append(cmdArgs, typeOption)
-
-		cmdArgs = append(cmdArgs, stepArgs...)
-
 		if verbose {
 			fmt.Fprintf(os.Stderr, "%s %s\n", "step", strings.Join(cmdArgs, " "))
 		}
 		stepCmd := exec.Command("step", cmdArgs...)
 		stepCmd.Stdout = os.Stdout
 		stepCmd.Stderr = os.Stderr
-		err = stepCmd.Run()
+		err := stepCmd.Run()
 		cobra.CheckErr(err)
 	},
 }
@@ -138,6 +145,7 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "print step command line to stderr before executing")
+	rootCmd.Flags().BoolVarP(&rootCA, "rootCA", "R", false, "write root CA file to `SUBJECT`")
 	rootCmd.Flags().StringVarP(&issuer, "issuer", "i", DEFAULT_ISSUER, "issuer/provisioner")
 	rootCmd.Flags().StringVarP(&passwordFile, "password-file", "p", DEFAULT_PASSWORD_FILE, "provisioner password file")
 	rootCmd.Flags().StringVarP(&duration, "duration", "d", "", "duration to expiration: valid units are: ns,us,ms,s,m,h,d,y")
