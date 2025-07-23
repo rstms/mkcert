@@ -5,3 +5,6 @@ build: fmt
 
 fmt:
 	fix go fmt ./...
+
+install:
+	go install

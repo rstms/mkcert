@@ -22,16 +22,18 @@ THE SOFTWARE.
 package cmd
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 const (
@@ -52,6 +54,24 @@ var typeRSA bool
 var typeEC bool
 var typeED bool
 var rootCA bool
+var outputTTY bool
+
+var EmojiPattern = regexp.MustCompile(`(?:[` +
+	`\x{1F600}-\x{1F64F}` + // emoticons
+	`\x{1F300}-\x{1F5FF}` + // symbols & pictographs
+	`\x{1F680}-\x{1F6FF}` + // transport & map symbols
+	`\x{1F700}-\x{1F77F}` + // alchemical symbols
+	`\x{1F780}-\x{1F7FF}` + // Geometric Shapes Extended
+	`\x{1F800}-\x{1F8FF}` + // Supplemental Arrows-C
+	`\x{1F900}-\x{1F9FF}` + // Supplemental Symbols and Pictographs
+	`\x{1FA00}-\x{1FAFF}` + // Chess Symbols and others
+	`\x{2600}-\x{26FF}` + // Miscellaneous Symbols
+	`\x{2700}-\x{27BF}` + // Dingbats
+	`\x{FE00}-\x{FE0F}` + // Variation Selectors
+	`\x{1F1E6}-\x{1F1FF}` + // Regional Indicator Symbols
+	`])`)
+
+var ANSIEscapePattern = regexp.MustCompile(`\x1B\[[;?0-9]*[mK]`)
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -65,6 +85,22 @@ The --rootCA flag writes the root CA cert to a file named by SUBJECT.
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
+
+		var timeoutError error
+		var cmdError error
+		var exitCode = -1
+		obuf := bytes.Buffer{}
+		ebuf := bytes.Buffer{}
+
+		defer func() {
+			if outputTTY {
+				fmt.Print(ttyFormat(obuf.String()))
+				fmt.Fprint(os.Stderr, ttyFormat(ebuf.String()))
+			}
+			cobra.CheckErr(timeoutError)
+			cobra.CheckErr(cmdError)
+			os.Exit(exitCode)
+		}()
 
 		cmdArgs := []string{}
 		if rootCA {
@@ -116,12 +152,53 @@ The --rootCA flag writes the root CA cert to a file named by SUBJECT.
 		if verbose {
 			fmt.Fprintf(os.Stderr, "%s %s\n", "step", strings.Join(cmdArgs, " "))
 		}
+
 		stepCmd := exec.Command("step", cmdArgs...)
-		stepCmd.Stdout = os.Stdout
-		stepCmd.Stderr = os.Stderr
-		err := stepCmd.Run()
+		if outputTTY {
+			stepCmd.Stdout = &obuf
+			stepCmd.Stderr = &ebuf
+		} else {
+			stepCmd.Stdout = os.Stdout
+			stepCmd.Stderr = os.Stderr
+		}
+
+		err := stepCmd.Start()
 		cobra.CheckErr(err)
+
+		exited := make(chan bool, 1)
+		timer := time.NewTimer(time.Duration(3) * time.Second)
+		defer timer.Stop()
+		go func() {
+			for {
+				select {
+				case <-timer.C:
+					timeoutError = errors.New("Timeout")
+					err := stepCmd.Process.Kill()
+					cobra.CheckErr(err)
+					return
+				case <-exited:
+					return
+				}
+			}
+
+		}()
+
+		cmdError = stepCmd.Wait()
+		exited <- true
+		if cmdError != nil {
+			switch e := cmdError.(type) {
+			case *exec.ExitError:
+				exitCode = e.ExitCode()
+			}
+		} else {
+			exitCode = stepCmd.ProcessState.ExitCode()
+		}
 	},
+}
+
+func ttyFormat(s string) string {
+	s = ANSIEscapePattern.ReplaceAllString(s, "")
+	return EmojiPattern.ReplaceAllString(s, "")
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -154,6 +231,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&typeRSA, "rsa", "r", false, "RSA key type (default) [choose one]")
 	rootCmd.Flags().BoolVarP(&typeEC, "ecurve", "E", false, "Elliptic Curve key type [choose one]")
 	rootCmd.Flags().BoolVarP(&typeED, "ed25519", "e", false, "ed25519 key type [choose one]")
+	rootCmd.Flags().BoolVar(&outputTTY, "tty", false, "tty output")
 	rootCmd.MarkFlagsMutuallyExclusive("rsa", "ecurve")
 	rootCmd.MarkFlagsMutuallyExclusive("rsa", "ed25519")
 	rootCmd.MarkFlagsMutuallyExclusive("ecurve", "ed25519")
