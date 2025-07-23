@@ -1,2 +1,5 @@
 mkcert
 notes
+.postactivate
+*.pem
+*.key
