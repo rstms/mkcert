@@ -38,7 +38,7 @@ import (
 	"time"
 )
 
-const VERSION = "0.0.7"
+const VERSION = "0.0.8"
 
 var EmojiPattern = regexp.MustCompile(`(?:[` +
 	`\x{2600}-\x{26FF}` + // Miscellaneous Symbols
