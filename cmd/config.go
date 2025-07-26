@@ -34,6 +34,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/rstms/mkcert/factory"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -45,23 +46,11 @@ var configCmd = &cobra.Command{
 write current configuration data to stdout in YAML format
 `,
 	Run: func(cmd *cobra.Command, args []string) {
-		file, err := os.CreateTemp("", "*.yaml")
+		optArgs := []string{}
+		_, err := factory.NewCertFactory(&optArgs)
 		cobra.CheckErr(err)
-		func() {
-			defer file.Close()
-			err = viper.WriteConfigTo(file)
-			cobra.CheckErr(err)
-		}()
-		defer func() {
-			cobra.CheckErr(os.Remove(file.Name()))
-		}()
-		data, err := os.ReadFile(file.Name())
-		cobra.CheckErr(err)
-		filename := viper.ConfigFileUsed()
-		if filename != "" {
-			fmt.Printf("# %s\n", filename)
-		}
-		fmt.Println(string(data))
+		fmt.Printf("# %s\n", viper.ConfigFileUsed())
+		viper.WriteConfigTo(os.Stdout)
 	},
 }
 
