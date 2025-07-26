@@ -160,7 +160,6 @@ func (c *CertFactory) Chain(pathname string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fmt.Printf("cert=%s key=%s\n", certFile, keyFile)
 	iLines, err := readCert(certFile, 1)
 	if err != nil {
 		return "", err
