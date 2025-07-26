@@ -107,10 +107,13 @@ func NewCertFactory(stepArgs *[]string) (*CertFactory, error) {
 		tty:                viper.GetBool("mkcert.echo_tty"),
 		stepBinary:         viper.GetString("mkcert.step.command"),
 		stepTimeoutSeconds: viper.GetInt64("mkcert.step.timeout_seconds"),
-		stepArgs:           *stepArgs,
+		stepArgs:           []string{},
 		DefaultDuration:    viper.GetString("mkcert.default_duration"),
 		keyType:            KeyTypeRSA,
 		issuer:             viper.GetString("mkcert.issuer"),
+	}
+	if stepArgs != nil {
+		f.stepArgs = append(f.stepArgs, *stepArgs...)
 	}
 	p, err := resolveTildePath(viper.GetString("mkcert.password_file"))
 	if err != nil {

@@ -46,8 +46,7 @@ var configCmd = &cobra.Command{
 write current configuration data to stdout in YAML format
 `,
 	Run: func(cmd *cobra.Command, args []string) {
-		optArgs := []string{}
-		_, err := factory.NewCertFactory(&optArgs)
+		_, err := factory.NewCertFactory(nil)
 		cobra.CheckErr(err)
 		fmt.Printf("# %s\n", viper.ConfigFileUsed())
 		viper.WriteConfigTo(os.Stdout)
