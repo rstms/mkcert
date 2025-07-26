@@ -4,9 +4,12 @@ smallstep step-cli
 
 https://github.com/smallstep/cli
 
-Openbsd: pkg_install step-cli
+## install step
+ - Openbsd: ```pkg_install step-cli```
+ - Windows: ```winget install Smallstep.step```
 
-step configuration: ~/.step
 
-step initialization incantation:
-    step ca bootstrap --ca-url https://keymaster.rstms.net --fingerprint XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+## step initialization incantation:
+```
+step ca bootstrap --ca-url https://keymaster.rstms.net --fingerprint XXXXXXXXXXXXXXX
+```
