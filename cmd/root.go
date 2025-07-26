@@ -1,292 +1,140 @@
 /*
-Copyright © 2024 Matt Krueger <mkrueger@rstms.net>
+Copyright © 2025 Matt Krueger <mkrueger@rstms.net>
+All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
 
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
+ 1. Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
+ 2. Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+
+ 3. Neither the name of the copyright holder nor the names of its contributors
+    may be used to endorse or promote products derived from this software
+    without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
 */
 package cmd
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
+	"os"
+
+	"github.com/rstms/mkcert/factory"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"regexp"
-	"strconv"
-	"strings"
-	"time"
 )
-
-const (
-	DEFAULT_ISSUER        = "keymaster@rstms.net"
-	DEFAULT_PASSWORD_FILE = "~/.secrets/.keymaster_password"
-)
-
-const version = "0.0.1"
 
 var cfgFile string
-var verbose bool
-var issuer string
-var passwordFile string
-var certFile string
-var keyFile string
-var duration string
-var typeRSA bool
-var typeEC bool
-var typeED bool
-var rootCA bool
-var outputTTY bool
 
-var EmojiPattern = regexp.MustCompile(`(?:[` +
-	`\x{1F600}-\x{1F64F}` + // emoticons
-	`\x{1F300}-\x{1F5FF}` + // symbols & pictographs
-	`\x{1F680}-\x{1F6FF}` + // transport & map symbols
-	`\x{1F700}-\x{1F77F}` + // alchemical symbols
-	`\x{1F780}-\x{1F7FF}` + // Geometric Shapes Extended
-	`\x{1F800}-\x{1F8FF}` + // Supplemental Arrows-C
-	`\x{1F900}-\x{1F9FF}` + // Supplemental Symbols and Pictographs
-	`\x{1FA00}-\x{1FAFF}` + // Chess Symbols and others
-	`\x{2600}-\x{26FF}` + // Miscellaneous Symbols
-	`\x{2700}-\x{27BF}` + // Dingbats
-	`\x{FE00}-\x{FE0F}` + // Variation Selectors
-	`\x{1F1E6}-\x{1F1FF}` + // Regional Indicator Symbols
-	`])`)
-
-var ANSIEscapePattern = regexp.MustCompile(`\x1B\[[;?0-9]*[mK]`)
-
-// rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "mkcert [flags] SUBJECT [-- STEP-OPTS]",
-	Short: "make client certificate",
+	Version: "0.0.7",
+	Use:     "mkcert [flags] SUBJECT [-- STEP-OPTS]",
+	Short:   "make client certificate",
 	Long: `
 Create a client certificate signed by the Reliance Systems Keymaster CA
 The --rootCA flag writes the root CA cert to a file named by SUBJECT.
 `,
 	Args: cobra.MinimumNArgs(1),
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
-
-		var timeoutError error
-		var cmdError error
-		var exitCode = -1
-		obuf := bytes.Buffer{}
-		ebuf := bytes.Buffer{}
-
-		defer func() {
-			if outputTTY {
-				fmt.Print(ttyFormat(obuf.String()))
-				fmt.Fprint(os.Stderr, ttyFormat(ebuf.String()))
-			}
-			cobra.CheckErr(timeoutError)
-			cobra.CheckErr(cmdError)
-			os.Exit(exitCode)
-		}()
-
-		cmdArgs := []string{}
-		if rootCA {
-			cmdArgs = []string{"ca", "root", "-f", args[0]}
-		} else {
-			subjectName := args[0]
-			stepArgs := args[1:]
-			passwordFile, err := resolveTildePath(passwordFile)
-			cobra.CheckErr(err)
-			if certFile == "" {
-				certFile = fmt.Sprintf("%s.pem", subjectName)
-			}
-			if keyFile == "" {
-				keyFile = fmt.Sprintf("%s.key", subjectName)
-			}
-			cmdArgs = []string{"ca", "certificate", subjectName, certFile, keyFile}
-			cmdArgs = append(cmdArgs, fmt.Sprintf("--issuer=%s", issuer))
-			cmdArgs = append(cmdArgs, fmt.Sprintf("--provisioner-password-file=%s", passwordFile))
-
-			switch {
-			case duration == "":
-			case strings.HasSuffix(duration, "y") || strings.HasSuffix(duration, "d"):
-				d, err := expirationDate(duration)
-				cobra.CheckErr(err)
-				duration = d
-			default:
-				d, err := time.ParseDuration(duration)
-				cobra.CheckErr(err)
-				duration = d.String()
-			}
-			if duration != "" {
-				cmdArgs = append(cmdArgs, fmt.Sprintf("--not-after=%s", duration))
-			}
-
-			var typeOption string
-			switch {
-			case typeEC:
-				typeOption = "--kty=EC"
-			case typeED:
-				typeOption = "--kty=OKP"
-			default:
-				typeOption = "--kty=RSA"
-			}
-
-			cmdArgs = append(cmdArgs, typeOption)
-
-			cmdArgs = append(cmdArgs, stepArgs...)
+		viper.Set("mkcert.verbose", viper.GetBool("verbose"))
+		viper.Set("mkcert.debug", viper.GetBool("debug"))
+		viper.Set("mkcert.overwrite", viper.GetBool("force"))
+		if viper.GetBool("tty") {
+			viper.Set("mkcert.echo_tty", true)
 		}
-		if verbose {
-			fmt.Fprintf(os.Stderr, "%s %s\n", "step", strings.Join(cmdArgs, " "))
+		if viper.GetBool("emoji") {
+			viper.Set("mkcert.echo_raw", true)
+		}
+		issuer := viper.GetString("issuer")
+		if issuer != "" {
+			viper.Set("mkcert.issuer", issuer)
+		}
+		passwordFile := viper.GetString("password_file")
+		if passwordFile != "" {
+			viper.Set("mkcert.password_file", passwordFile)
 		}
 
-		stepCmd := exec.Command("step", cmdArgs...)
-		if outputTTY {
-			stepCmd.Stdout = &obuf
-			stepCmd.Stderr = &ebuf
-		} else {
-			stepCmd.Stdout = os.Stdout
-			stepCmd.Stderr = os.Stderr
+		subject := args[0]
+		optArgs := []string{}
+		if len(args) > 1 {
+			optArgs = args[1:]
+		}
+		certFactory, err := factory.NewCertFactory(&optArgs)
+
+		switch {
+		case viper.GetBool("ecurve"):
+			certFactory.SetKeyType(factory.KeyTypeECURVE)
+		case viper.GetBool("ed25519"):
+			certFactory.SetKeyType(factory.KeyTypeED25519)
 		}
 
-		err := stepCmd.Start()
+		outputCertFile := viper.GetString("cert_file")
+		outputKeyFile := viper.GetString("key_file")
+
 		cobra.CheckErr(err)
-
-		exited := make(chan bool, 1)
-		timer := time.NewTimer(time.Duration(3) * time.Second)
-		defer timer.Stop()
-		go func() {
-			for {
-				select {
-				case <-timer.C:
-					timeoutError = errors.New("Timeout")
-					err := stepCmd.Process.Kill()
-					cobra.CheckErr(err)
-					return
-				case <-exited:
-					return
-				}
-			}
-
-		}()
-
-		cmdError = stepCmd.Wait()
-		exited <- true
-		if cmdError != nil {
-			switch e := cmdError.(type) {
-			case *exec.ExitError:
-				exitCode = e.ExitCode()
-			}
-		} else {
-			exitCode = stepCmd.ProcessState.ExitCode()
+		switch {
+		case viper.GetBool("root"):
+			certFile, err := certFactory.Root(subject)
+			cobra.CheckErr(err)
+			fmt.Println(certFile)
+		case viper.GetBool("chain"):
+			certFile, err := certFactory.Chain(subject)
+			cobra.CheckErr(err)
+			fmt.Println(certFile)
+		default:
+			duration := viper.GetString("duration")
+			certFile, keyFile, err := certFactory.CertificatePair(subject, duration, outputCertFile, outputKeyFile)
+			cobra.CheckErr(err)
+			fmt.Println(certFile)
+			fmt.Println(keyFile)
 		}
 	},
 }
 
-func ttyFormat(s string) string {
-	s = ANSIEscapePattern.ReplaceAllString(s, "")
-	return EmojiPattern.ReplaceAllString(s, "")
-}
-
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(1)
 	}
 }
-
 func init() {
-	cobra.OnInitialize(initConfig)
+	cobra.OnInitialize(InitConfig)
+	OptionString("logfile", "l", "", "log filename")
+	OptionString("config", "c", "", "config file")
+	OptionSwitch("debug", "", "produce debug output")
+	OptionSwitch("verbose", "", "increase verbosity")
+	OptionSwitch("force", "", "overwrite existing files")
+	OptionSwitch("root", "", "generate root CA cert")
+	OptionSwitch("chain", "", "generate root/intermeiate CA cert chain")
+	OptionSwitch("emoji", "", "don't strip emoji and ANSI codes from output")
+	OptionSwitch("tty", "", "show tty output from 'step' command")
 
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
+	OptionString("issuer", "", "", "issuer/provisioner")
+	OptionString("password-file", "", "", "provisioner password file")
+	OptionString("duration", "d", "5m", "duration to expiration: valid units are: ns,us,ms,s,m,h,d,y")
+	OptionString("cert-file", "", "", "certificate output filename")
+	OptionString("key-file", "", "", "key output filename")
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.mkcert.yaml)")
+	OptionSwitch("rsa", "", "RSA key type (default)")
+	OptionSwitch("ecurve", "", "Elliptic Curve key type")
+	OptionSwitch("ed25519", "", "ed25519 key type")
 
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "print step command line to stderr before executing")
-	rootCmd.Flags().BoolVarP(&rootCA, "rootCA", "R", false, "write root CA file to `SUBJECT`")
-	rootCmd.Flags().StringVarP(&issuer, "issuer", "i", DEFAULT_ISSUER, "issuer/provisioner")
-	rootCmd.Flags().StringVarP(&passwordFile, "password-file", "p", DEFAULT_PASSWORD_FILE, "provisioner password file")
-	rootCmd.Flags().StringVarP(&duration, "duration", "d", "", "duration to expiration: valid units are: ns,us,ms,s,m,h,d,y")
-	rootCmd.Flags().StringVarP(&certFile, "cert-file", "c", "", "new certificate filename")
-	rootCmd.Flags().StringVarP(&keyFile, "key-file", "k", "", "new key filename")
-	rootCmd.Flags().BoolVarP(&typeRSA, "rsa", "r", false, "RSA key type (default) [choose one]")
-	rootCmd.Flags().BoolVarP(&typeEC, "ecurve", "E", false, "Elliptic Curve key type [choose one]")
-	rootCmd.Flags().BoolVarP(&typeED, "ed25519", "e", false, "ed25519 key type [choose one]")
-	rootCmd.Flags().BoolVar(&outputTTY, "tty", false, "tty output")
 	rootCmd.MarkFlagsMutuallyExclusive("rsa", "ecurve")
 	rootCmd.MarkFlagsMutuallyExclusive("rsa", "ed25519")
 	rootCmd.MarkFlagsMutuallyExclusive("ecurve", "ed25519")
-}
-
-// initConfig reads in config file and ENV variables if set.
-func initConfig() {
-	if cfgFile != "" {
-		// Use config file from the flag.
-		viper.SetConfigFile(cfgFile)
-	} else {
-		// Find home directory.
-		home, err := os.UserHomeDir()
-		cobra.CheckErr(err)
-
-		// Search config in home directory with name ".mkcert" (without extension).
-		viper.AddConfigPath(home)
-		viper.SetConfigType("yaml")
-		viper.SetConfigName(".mkcert")
-	}
-
-	viper.AutomaticEnv() // read in environment variables that match
-
-	// If a config file is found, read it in.
-	if err := viper.ReadInConfig(); err == nil {
-		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
-	}
-}
-
-func resolveTildePath(path string) (string, error) {
-	if strings.HasPrefix(path, "~") {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		path = strings.Replace(path, "~", homeDir, 1)
-	}
-	return filepath.Clean(path), nil
-}
-
-func expirationDate(duration string) (string, error) {
-	if len(duration) == 0 {
-		return "", fmt.Errorf("invalid duration: '%v'", duration)
-	}
-	unit := string([]rune(duration)[len(duration)-1])
-	duration = string([]rune(duration)[:len(duration)-1])
-	days, err := strconv.Atoi(duration)
-	if err != nil {
-		return "", err
-	}
-	if unit == "y" {
-		days = days * 365
-	}
-	now := time.Now()
-	fmt.Printf("days=%d unit=%s\n", days, unit)
-	expiration := now.AddDate(0, 0, days)
-	return expiration.Format(time.RFC3339), nil
 }
