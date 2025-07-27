@@ -38,7 +38,7 @@ import (
 	"time"
 )
 
-const Version = "0.1.0"
+const Version = "0.1.2"
 
 var EmojiPattern = regexp.MustCompile(`(?:[` +
 	`\x{2600}-\x{26FF}` + // Miscellaneous Symbols
@@ -160,7 +160,6 @@ func (c *CertFactory) Chain(pathname string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fmt.Printf("cert=%s key=%s\n", certFile, keyFile)
 	iLines, err := readCert(certFile, 1)
 	if err != nil {
 		return "", err
