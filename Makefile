@@ -2,7 +2,7 @@
 
 program != basename $$(pwd)
 
-go_version = 1.24.5
+go_version = go1.24.5
 
 
 latest_release != gh release list --json tagName --jq '.[0].tagName' | tr -d v
@@ -22,7 +22,7 @@ fmt: go.sum
 	fix go fmt . ./...
 
 go.mod:
-	go$(go_version) mod init
+	$(go_version) mod init
 
 go.sum: go.mod
 	go mod tidy
