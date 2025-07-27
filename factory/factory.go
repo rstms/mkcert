@@ -38,7 +38,7 @@ import (
 	"time"
 )
 
-const VERSION = "0.0.11"
+const Version = "0.0.11"
 
 var EmojiPattern = regexp.MustCompile(`(?:[` +
 	`\x{2600}-\x{26FF}` + // Miscellaneous Symbols
@@ -100,7 +100,7 @@ func NewCertFactory(stepArgs *[]string) (*CertFactory, error) {
 	viper.SetDefault("mkcert.issuer", "keymaster@"+domain)
 	viper.SetDefault("mkcert.default_duration", "5m")
 	f := CertFactory{
-		Version:            VERSION,
+		Version:            Version,
 		debug:              viper.GetBool("mkcert.debug"),
 		overwrite:          viper.GetBool("mkcert.overwrite"),
 		raw:                viper.GetBool("mkcert.echo_raw"),
@@ -446,7 +446,6 @@ func expirationDate(duration string) (string, error) {
 		days = days * 365
 	}
 	now := time.Now()
-	fmt.Printf("days=%d unit=%s\n", days, unit)
 	expiration := now.AddDate(0, 0, days)
 	return expiration.Format(time.RFC3339), nil
 }
