@@ -40,7 +40,7 @@ import (
 
 const Version = "0.1.8"
 
-var EmojiPattern = regexp.MustCompile(`(?:[` +
+var emojiPattern = regexp.MustCompile(`(?:[` +
 	`\x{2600}-\x{26FF}` + // Miscellaneous Symbols
 	`\x{2700}-\x{27BF}` + // Dingbats
 	`\x{FE00}-\x{FE0F}` + // Variation Selectors
@@ -55,7 +55,7 @@ var EmojiPattern = regexp.MustCompile(`(?:[` +
 	`\x{1FA00}-\x{1FAFF}` + // Chess Symbols and others
 	`])`)
 
-var ANSIEscapePattern = regexp.MustCompile(`\x1B\[[;?0-9]*[mK]`)
+var ansiEscapePattern = regexp.MustCompile(`\x1B\[[;?0-9]*[mK]`)
 
 type KeyType int
 
@@ -192,6 +192,37 @@ func (c *CertFactory) Chain(pathname string) (string, error) {
 		fmt.Fprintf(ofp, "%s\n", line)
 	}
 	return rootFile, nil
+}
+
+func (c *CertFactory) Intermediate(pathname string) (string, error) {
+
+	certFile, keyFile, err := c.CertificatePair(pathname, "", "", "")
+	if err != nil {
+		return "", err
+	}
+	iLines, err := readCert(certFile, 1)
+	if err != nil {
+		return "", err
+	}
+	err = os.Remove(certFile)
+	if err != nil {
+		return "", err
+	}
+	err = os.Remove(keyFile)
+	if err != nil {
+		return "", err
+	}
+
+	ofp, err := os.Create(certFile)
+	if err != nil {
+		return "", err
+	}
+	defer ofp.Close()
+
+	for _, line := range iLines {
+		fmt.Fprintf(ofp, "%s\n", line)
+	}
+	return certFile, nil
 }
 
 func readCert(filename string, index int) ([]string, error) {
@@ -411,8 +442,8 @@ func (c *CertFactory) runStep(cmdArgs []string) error {
 }
 
 func ttyFormat(s string) string {
-	s = ANSIEscapePattern.ReplaceAllString(s, "")
-	return EmojiPattern.ReplaceAllString(s, "")
+	s = ansiEscapePattern.ReplaceAllString(s, "")
+	return emojiPattern.ReplaceAllString(s, "")
 }
 
 func resolveTildePath(path string) (string, error) {
@@ -450,7 +481,7 @@ func expirationDate(duration string) (string, error) {
 }
 
 func (c *CertFactory) checkOutputFile(pathname string) error {
-	if IsFile(pathname) {
+	if isFile(pathname) {
 		if c.overwrite {
 			return os.Remove(pathname)
 		}
@@ -459,7 +490,7 @@ func (c *CertFactory) checkOutputFile(pathname string) error {
 	return nil
 }
 
-func IsFile(pathname string) bool {
+func isFile(pathname string) bool {
 	_, err := os.Stat(pathname)
 	return !os.IsNotExist(err)
 }
