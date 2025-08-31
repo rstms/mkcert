@@ -26,7 +26,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/spf13/viper"
 	"log"
 	"os"
 	"os/exec"
@@ -81,13 +80,17 @@ type CertFactory struct {
 }
 
 func NewCertFactory(stepArgs *[]string) (*CertFactory, error) {
-	viper.SetDefault("mkcert.step.command", "step")
-	viper.SetDefault("mkcert.step.timeout_seconds", 3)
+	prefix := "mkcert."
+	if ProgramName() == "mkcert" {
+		prefix = ""
+	}
+	ViperSetDefault(prefix+"step.command", "step")
+	ViperSetDefault(prefix+"step.timeout_seconds", 3)
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return nil, err
 	}
-	viper.SetDefault("mkcert.password_file", filepath.Join(configDir, "mkcert", "password"))
+	ViperSetDefault("password_file", filepath.Join(configDir, "mkcert", "password"))
 	hostname, err := os.Hostname()
 	if err != nil {
 		return nil, err
@@ -97,25 +100,25 @@ func NewCertFactory(stepArgs *[]string) (*CertFactory, error) {
 	if !ok {
 		domain = host
 	}
-	viper.SetDefault("mkcert.issuer", "keymaster@"+domain)
-	viper.SetDefault("mkcert.default_duration", "5m")
+	ViperSetDefault("issuer", "keymaster@"+domain)
+	ViperSetDefault("default_duration", "5m")
 	f := CertFactory{
 		Version:            Version,
-		debug:              viper.GetBool("mkcert.debug"),
-		overwrite:          viper.GetBool("mkcert.overwrite"),
-		raw:                viper.GetBool("mkcert.echo_raw"),
-		tty:                viper.GetBool("mkcert.echo_tty"),
-		stepBinary:         viper.GetString("mkcert.step.command"),
-		stepTimeoutSeconds: viper.GetInt64("mkcert.step.timeout_seconds"),
+		debug:              ViperGetBool("debug"),
+		overwrite:          ViperGetBool(prefix + "overwrite"),
+		raw:                ViperGetBool(prefix + "echo_raw"),
+		tty:                ViperGetBool(prefix + "echo_tty"),
+		stepBinary:         ViperGetString(prefix + "step.command"),
+		stepTimeoutSeconds: ViperGetInt64(prefix + "step.timeout_seconds"),
 		stepArgs:           []string{},
-		DefaultDuration:    viper.GetString("mkcert.default_duration"),
+		DefaultDuration:    ViperGetString(prefix + "default_duration"),
 		keyType:            KeyTypeRSA,
-		issuer:             viper.GetString("mkcert.issuer"),
+		issuer:             ViperGetString(prefix + "issuer"),
 	}
 	if stepArgs != nil {
 		f.stepArgs = append(f.stepArgs, *stepArgs...)
 	}
-	p, err := resolveTildePath(viper.GetString("mkcert.password_file"))
+	p, err := resolveTildePath(ViperGetString(prefix + "password_file"))
 	if err != nil {
 		return nil, err
 	}
