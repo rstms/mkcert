@@ -41,7 +41,7 @@ import (
 var cfgFile string
 
 var rootCmd = &cobra.Command{
-	Version: "0.2.3",
+	Version: "0.2.4",
 	Use:     "mkcert [flags] SUBJECT [-- STEP-OPTS]",
 	Short:   "make client certificate",
 	Long: `
