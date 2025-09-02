@@ -104,7 +104,7 @@ func NewCertFactory(stepArgs *[]string) (*CertFactory, error) {
 	ViperSetDefault(prefix+"default_duration", "5m")
 	f := CertFactory{
 		Version:            Version,
-		debug:              ViperGetBool("debug"),
+		debug:              ViperGetBool(prefix + "debug"),
 		overwrite:          ViperGetBool(prefix + "overwrite"),
 		raw:                ViperGetBool(prefix + "echo_raw"),
 		tty:                ViperGetBool(prefix + "echo_tty"),
