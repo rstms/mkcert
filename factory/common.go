@@ -37,6 +37,10 @@ func OptionString(cobraCmd CobraCommand, name, flag, defaultValue, description s
 	common.OptionString(cobraCmd, name, flag, defaultValue, description)
 }
 
+func OptionInt(cobraCmd CobraCommand, name, flag string, defaultValue int, description string) {
+	common.OptionInt(cobraCmd, name, flag, defaultValue, description)
+}
+
 func CobraAddCommand(cobraRootCmd, parentCmd, cobraCmd CobraCommand) {
 	common.CobraAddCommand(cobraRootCmd, parentCmd, cobraCmd)
 }

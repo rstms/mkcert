@@ -36,7 +36,6 @@ import (
 
 	"github.com/rstms/mkcert/factory"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var cfgFile string
@@ -51,23 +50,11 @@ The --rootCA flag writes the root CA cert to a file named by SUBJECT.
 `,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		viper.Set("mkcert.verbose", viper.GetBool("verbose"))
-		viper.Set("mkcert.debug", viper.GetBool("debug"))
-		viper.Set("mkcert.overwrite", viper.GetBool("force"))
-		if viper.GetBool("tty") {
-			viper.Set("mkcert.echo_tty", true)
-		}
-		if viper.GetBool("emoji") {
-			viper.Set("mkcert.echo_raw", true)
-		}
-		issuer := viper.GetString("issuer")
-		if issuer != "" {
-			viper.Set("mkcert.issuer", issuer)
-		}
-		passwordFile := viper.GetString("password_file")
-		if passwordFile != "" {
-			viper.Set("mkcert.password_file", passwordFile)
-		}
+
+		// write factory config keys from option flags
+		ViperSet("overwrite", ViperGetBool("force"))
+		ViperSet("echo_tty", ViperGetBool("tty"))
+		ViperSet("echo_raw", ViperGetBool("emoji"))
 
 		subject := args[0]
 		optArgs := []string{}
@@ -77,31 +64,31 @@ The --rootCA flag writes the root CA cert to a file named by SUBJECT.
 		certFactory, err := factory.NewCertFactory(&optArgs)
 
 		switch {
-		case viper.GetBool("ecurve"):
+		case ViperGetBool("ecurve"):
 			certFactory.SetKeyType(factory.KeyTypeECURVE)
-		case viper.GetBool("ed25519"):
+		case ViperGetBool("ed25519"):
 			certFactory.SetKeyType(factory.KeyTypeED25519)
 		}
 
-		outputCertFile := viper.GetString("cert_file")
-		outputKeyFile := viper.GetString("key_file")
+		outputCertFile := ViperGetString("cert_file")
+		outputKeyFile := ViperGetString("key_file")
 
 		cobra.CheckErr(err)
 		switch {
-		case viper.GetBool("root"):
+		case ViperGetBool("root"):
 			certFile, err := certFactory.Root(subject)
 			cobra.CheckErr(err)
 			fmt.Println(certFile)
-		case viper.GetBool("chain"):
+		case ViperGetBool("chain"):
 			certFile, err := certFactory.Chain(subject)
 			cobra.CheckErr(err)
 			fmt.Println(certFile)
-		case viper.GetBool("intermediate"):
+		case ViperGetBool("intermediate"):
 			certFile, err := certFactory.Intermediate(subject)
 			cobra.CheckErr(err)
 			fmt.Println(certFile)
 		default:
-			duration := viper.GetString("duration")
+			duration := ViperGetString("duration")
 			certFile, keyFile, err := certFactory.CertificatePair(subject, duration, outputCertFile, outputKeyFile)
 			cobra.CheckErr(err)
 			fmt.Println(certFile)
