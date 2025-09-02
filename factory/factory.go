@@ -90,7 +90,7 @@ func NewCertFactory(stepArgs *[]string) (*CertFactory, error) {
 	if err != nil {
 		return nil, err
 	}
-	ViperSetDefault("password_file", filepath.Join(configDir, "mkcert", "password"))
+	ViperSetDefault(prefix+"password_file", filepath.Join(configDir, "mkcert", "password"))
 	hostname, err := os.Hostname()
 	if err != nil {
 		return nil, err
@@ -100,8 +100,8 @@ func NewCertFactory(stepArgs *[]string) (*CertFactory, error) {
 	if !ok {
 		domain = host
 	}
-	ViperSetDefault("issuer", "keymaster@"+domain)
-	ViperSetDefault("default_duration", "5m")
+	ViperSetDefault(prefix+"issuer", "keymaster@"+domain)
+	ViperSetDefault(prefix+"default_duration", "5m")
 	f := CertFactory{
 		Version:            Version,
 		debug:              ViperGetBool("debug"),
