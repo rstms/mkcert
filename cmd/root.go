@@ -120,8 +120,10 @@ func init() {
 	OptionSwitch(rootCmd, "emoji", "", "don't strip emoji and ANSI codes from output")
 	OptionSwitch(rootCmd, "tty", "", "show tty output from 'step' command")
 
-	OptionString(rootCmd, "issuer", "", "", "issuer/provisioner")
+	OptionString(rootCmd, "keymaster", "", "", "configuration root CA")
 	OptionString(rootCmd, "password-file", "", "", "provisioner password file")
+	OptionString(rootCmd, "issuer", "", "", "issuer/provisioner")
+
 	OptionString(rootCmd, "duration", "D", "5m", "duration to expiration: valid units are: ns,us,ms,s,m,h,d,y")
 	OptionString(rootCmd, "cert-file", "", "", "certificate output filename")
 	OptionString(rootCmd, "key-file", "", "", "key output filename")
