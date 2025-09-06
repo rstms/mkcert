@@ -40,7 +40,7 @@ import (
 	"time"
 )
 
-const Version = "0.2.5"
+const Version = "0.2.6"
 
 var DEFAULT_URL_SUBJECT_MAP map[string]string = map[string]string{
 	"https://keymaster.rstms.net": "CN=Reliance Systems Keymaster Root CA",
