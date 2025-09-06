@@ -459,9 +459,9 @@ func (c *CertFactory) CertificatePair(subjectName, duration, certFile, keyFile s
 	cmdArgs = []string{"ca", "certificate", subjectName, certFile, keyFile}
 	cmdArgs = append(cmdArgs, fmt.Sprintf("--ca-url=%s", c.caURL))
 	cmdArgs = append(cmdArgs, fmt.Sprintf("--root=%s", c.rootCA))
+	cmdArgs = append(cmdArgs, fmt.Sprintf("--fingerprint=%s", c.fingerprint))
 	cmdArgs = append(cmdArgs, fmt.Sprintf("--issuer=%s", c.issuer))
 	cmdArgs = append(cmdArgs, fmt.Sprintf("--provisioner-password-file=%s", c.passwordFile))
-	cmdArgs = append(cmdArgs, fmt.Sprintf("--ca-url=%s", c.caURL))
 
 	switch {
 	case duration == "":
