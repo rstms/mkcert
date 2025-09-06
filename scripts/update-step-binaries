@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+
+assets=$(gh --repo smallstep/cli release view --json assets --jq '.assets[]|.url')
+
+rm -rf stepper
+mkdir stepper
+curl -L $(grep <<<$assets 'step_windows_amd64\.zip$') -o stepper/windows_step.zip
+( cd stepper && unzip windows_step.zip )
+mv $(find stepper -type f -name step.exe) factory/bin/windows_step.exe
+
+rm -rf stepper
+mkdir stepper
+curl -L $(grep <<<$assets 'step_linux_amd64\.tar\.gz$') -o stepper/linux_step.tar.gz
+( cd stepper && tar zxf linux_step.tar.gz )
+mv $(find stepper -type f -name step) factory/bin/linux_step
+
+rm -rf stepper
+
+case $(uname) in 
+  OpenBSD) cp $(which step) factory/bin/openbsd_step
+esac

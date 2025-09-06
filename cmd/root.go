@@ -39,6 +39,7 @@ import (
 )
 
 var cfgFile string
+var certFactory *factory.CertFactory
 
 var rootCmd = &cobra.Command{
 	Version: "0.2.5",
@@ -48,20 +49,28 @@ var rootCmd = &cobra.Command{
 Create a client certificate signed by the Reliance Systems Keymaster CA
 The --rootCA flag writes the root CA cert to a file named by SUBJECT.
 `,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		f, err := factory.NewCertFactory(nil)
+		cobra.CheckErr(err)
+		certFactory = f
+
+	},
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 
 		// write factory config keys from option flags
-		ViperSet("overwrite", ViperGetBool("force"))
-		ViperSet("echo_tty", ViperGetBool("tty"))
-		ViperSet("echo_raw", ViperGetBool("emoji"))
+		certFactory.Overwrite = ViperGetBool("force")
+		certFactory.TTY = ViperGetBool("tty")
+		certFactory.Raw = ViperGetBool("emoji")
 
 		subject := args[0]
+
+		// write args following '--' to certFactory for pass-through to step command
 		optArgs := []string{}
 		if len(args) > 1 {
 			optArgs = args[1:]
 		}
-		certFactory, err := factory.NewCertFactory(&optArgs)
+		certFactory.StepArgs = optArgs
 
 		switch {
 		case ViperGetBool("ecurve"):
@@ -73,7 +82,6 @@ The --rootCA flag writes the root CA cert to a file named by SUBJECT.
 		outputCertFile := ViperGetString("cert_file")
 		outputKeyFile := ViperGetString("key_file")
 
-		cobra.CheckErr(err)
 		switch {
 		case ViperGetBool("root"):
 			certFile, err := certFactory.Root(subject)

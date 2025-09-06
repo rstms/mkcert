@@ -52,8 +52,11 @@ update:
 	sed <cmd/common.go >factory/common.go 's/^package cmd/package factory/'
 	@$(foreach m,$(rstms_modules),go get $(m)@$(call latest_module_release,$(m));)
 
+step-binaries:
+	scripts/update-step-binaries
+
 clean:
-	rm -f $(program) *.core 
+	rm -f $(program) $(program).exe *.core *.pem *.key
 	go clean
 
 sterile: clean
