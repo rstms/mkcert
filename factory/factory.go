@@ -216,6 +216,10 @@ func NewCertFactory(stepArgs *[]string) (*CertFactory, error) {
 		}
 	}
 
+	if ViperGetString(prefix+"issuer") == "" && f.issuer != "" {
+		ViperSet(prefix+"issuer", f.issuer)
+	}
+
 	if f.caURL == "" {
 		return nil, Fatalf("missing config: ca_url")
 	}
