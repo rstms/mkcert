@@ -1,0 +1,18 @@
+# keymaster config
+#
+# Used for generating config values when:
+#   - This file (~/.config/mkcert/keymaster.yaml) exists
+#   - keymaster.pem is present in the config
+#   - the fingerpring of keymaster.pem is a key in this file
+#
+# key: root certificate fingerpint
+#   hostname: CA url hostname 
+#   port: optional CA URL port
+#   path: optional CA URL path
+#   subject: root cert Subject 'CN=...'
+#   issuer: emailuser@domain.ext
+
+965800f82dce0b3047fa66e2801010047b5812a3b7f055a72cc3c424bb3bbe80:
+  hostname: keymaster.rstms.net
+  subject: CN=Reliance Systems Keymaster Root CA
+  issuer: keymaster@rstms.net
