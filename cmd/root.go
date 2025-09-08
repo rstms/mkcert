@@ -95,6 +95,10 @@ The --rootCA flag writes the root CA cert to a file named by SUBJECT.
 			certFile, err := certFactory.Intermediate(subject)
 			cobra.CheckErr(err)
 			fmt.Println(certFile)
+		case ViperGetBool("hash"):
+			hash, err := certFactory.Hash(subject)
+			cobra.CheckErr(err)
+			fmt.Println(hash)
 		default:
 			duration := ViperGetString("duration")
 			certFile, keyFile, err := certFactory.CertificatePair(subject, duration, outputCertFile, outputKeyFile)
@@ -115,6 +119,7 @@ func init() {
 	CobraInit(rootCmd)
 	OptionSwitch(rootCmd, "force", "", "overwrite existing files")
 	OptionSwitch(rootCmd, "root", "", "generate root CA cert")
+	OptionSwitch(rootCmd, "hash", "", "output openssl x509 subject hash")
 	OptionSwitch(rootCmd, "chain", "", "generate root/intermediate CA cert chain")
 	OptionSwitch(rootCmd, "intermediate", "", "generate intermediate CA cert")
 	OptionSwitch(rootCmd, "emoji", "", "don't strip emoji and ANSI codes from output")

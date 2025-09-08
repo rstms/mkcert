@@ -773,3 +773,21 @@ func (c *CertFactory) checkOutputFile(pathname string) error {
 	}
 	return nil
 }
+
+func (c *CertFactory) Hash(pathname string) (string, error) {
+	cmd := exec.Command("openssl", "x509", "-hash", "-in", pathname, "-noout")
+	var obuf bytes.Buffer
+	cmd.Stdout = &obuf
+	if c.Debug {
+		log.Printf("Hash: executing '%v'\n", cmd.String())
+	}
+	err := cmd.Run()
+	if err != nil {
+		return "", Fatal(err)
+	}
+	hash := strings.TrimSpace(obuf.String())
+	if c.Debug {
+		log.Printf("Hash: file=%s hash=%s\n", pathname, hash)
+	}
+	return hash, nil
+}
