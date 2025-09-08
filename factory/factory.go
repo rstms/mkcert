@@ -88,22 +88,23 @@ const (
 
 type CertFactory struct {
 	Version            string
-	debug              bool
-	verbose            bool
+	Debug              bool
+	Verbose            bool
 	Raw                bool
 	TTY                bool
 	Overwrite          bool
-	stepBinary         string
+	StepBinary         string
 	DefaultDuration    string
-	stepTimeoutSeconds int64
+	StepTimeoutSeconds int64
 	StepArgs           []string
-	keyType            KeyType
-	passwordFile       string
-	issuer             string
-	fingerprint        string
-	caURL              string
-	rootCA             string
-	configDir          string
+	KeyType            KeyType
+	PasswordFile       string
+	Issuer             string
+	Fingerprint        string
+	CaURL              string
+	RootCA             string
+	ConfigDir          string
+	CacheDir           string
 }
 
 func NewCertFactory(stepArgs *[]string) (*CertFactory, error) {
@@ -112,88 +113,90 @@ func NewCertFactory(stepArgs *[]string) (*CertFactory, error) {
 		prefix = ""
 	}
 	ViperSetDefault(prefix+"timeout_seconds", 3)
-	configDir, err := os.UserConfigDir()
+
+	userConfigDir, err := os.UserConfigDir()
 	if err != nil {
 		return nil, Fatal(err)
 	}
-	configDir = filepath.Join(configDir, "mkcert")
-	if !IsDir(configDir) {
-		err := os.MkdirAll(configDir, 0700)
-		if err != nil {
-			return nil, Fatal(err)
-		}
+	ViperSetDefault(prefix+"config_dir", filepath.Join(userConfigDir, ProgramName()))
+
+	userCacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return nil, Fatal(err)
 	}
-	ViperSetDefault(prefix+"password_file", filepath.Join(configDir, "password"))
+	ViperSetDefault(prefix+"cache_dir", filepath.Join(userCacheDir, ProgramName()))
+
+	configDir := ViperGetString(prefix + "config_dir")
+	ViperSetDefault(prefix+"password_file", filepath.Join(configDir, "mkcert_password"))
 
 	ViperSetDefault(prefix+"default_duration", "5m")
 	f := CertFactory{
 		Version:            Version,
-		passwordFile:       ViperGetString(prefix + "password_file"),
-		debug:              ViperGetBool(prefix + "debug"),
-		verbose:            ViperGetBool(prefix + "verbose"),
+		PasswordFile:       ViperGetString(prefix + "password_file"),
+		Debug:              ViperGetBool(prefix + "debug"),
+		Verbose:            ViperGetBool(prefix + "verbose"),
 		Overwrite:          ViperGetBool(prefix + "overwrite"),
 		Raw:                ViperGetBool(prefix + "echo_raw"),
 		TTY:                ViperGetBool(prefix + "echo_tty"),
-		stepBinary:         ViperGetString(prefix + "step_command"),
-		stepTimeoutSeconds: ViperGetInt64(prefix + "timeout_seconds"),
+		StepBinary:         ViperGetString(prefix + "step_command"),
+		StepTimeoutSeconds: ViperGetInt64(prefix + "timeout_seconds"),
 		StepArgs:           []string{},
 		DefaultDuration:    ViperGetString(prefix + "default_duration"),
-		keyType:            KeyTypeRSA,
-		issuer:             ViperGetString(prefix + "issuer"),
-		caURL:              ViperGetString(prefix + "ca_url"),
-		fingerprint:        ViperGetString(prefix + "fingerprint"),
-		rootCA:             ViperGetString(prefix + "root_cert"),
-		configDir:          configDir,
+		KeyType:            KeyTypeRSA,
+		Issuer:             ViperGetString(prefix + "issuer"),
+		CaURL:              ViperGetString(prefix + "ca_url"),
+		Fingerprint:        ViperGetString(prefix + "fingerprint"),
+		RootCA:             ViperGetString(prefix + "root_cert"),
+		ConfigDir:          ViperGetString(prefix + "config_dir"),
+		CacheDir:           ViperGetString(prefix + "cache_dir"),
 	}
 
-	if f.stepBinary == "" || !IsFile(f.stepBinary) {
-		bin, err := InstallStepBinary()
+	if !IsDir(f.ConfigDir) {
+		err := os.MkdirAll(f.ConfigDir, 0700)
+		if err != nil {
+			return nil, Fatal(err)
+		}
+	}
+
+	if !IsDir(f.CacheDir) {
+		err := os.MkdirAll(f.CacheDir, 0700)
+		if err != nil {
+			return nil, Fatal(err)
+		}
+	}
+
+	if f.StepBinary == "" || !IsFile(f.StepBinary) {
+		bin, err := f.installStepBinary()
 		if err != nil {
 			return nil, err
 		}
-		f.stepBinary = bin
+		f.StepBinary = bin
 		ViperSet(prefix+"step_command", bin)
 	}
 
-	if f.caURL == "" || f.fingerprint == "" || f.rootCA == "" {
+	if f.CaURL == "" || f.Fingerprint == "" || f.RootCA == "" || f.Issuer == "" {
 		keymaster := ViperGetString(prefix + "keymaster")
-		var config *StepConfig
-		var err error
 		if keymaster != "" && IsFile(keymaster) {
-			// side effect: initFromKeymaster will set issuer if a match is found
-			config, err = f.initFromKeymaster(keymaster)
+			err := f.initFromKeymaster(keymaster)
 			if err != nil {
 				return nil, err
 			}
 		}
+	}
 
-		// keymaster config did not work, try reading the ~/.step config
-		if config == nil {
-			config, err = f.readStepConfig()
-			if err != nil {
-				return nil, Fatalf("failed reading step config: %v", err)
-			}
-		}
-		if config != nil {
-			if f.caURL == "" {
-				f.caURL = config.URL
-				ViperSet(prefix+"ca_url", f.caURL)
-			}
-
-			if f.fingerprint == "" {
-				f.fingerprint = config.Fingerprint
-				ViperSet(prefix+"fingerprint", f.fingerprint)
-			}
-
-			if f.rootCA == "" {
-				f.rootCA = config.Root
-				ViperSet(prefix+"root_cert", f.rootCA)
-			}
+	if f.CaURL == "" || f.Fingerprint == "" || f.RootCA == "" {
+		// try reading the ~/.step config
+		err = f.initFromStepConfig()
+		if err != nil {
+			return nil, Fatal(err)
 		}
 	}
 
 	// if issuer or caURL are still unset, try setting domain-based values
-	if f.issuer == "" || f.caURL == "" {
+	if f.Issuer == "" || f.CaURL == "" {
+
+		// FIXME: Hostname won't return the domain on windows
+
 		hostname, err := os.Hostname()
 		if err != nil {
 			return nil, err
@@ -205,46 +208,66 @@ func NewCertFactory(stepArgs *[]string) (*CertFactory, error) {
 			domain = host
 		}
 		if strings.Contains(domain, ".") {
-			if f.issuer == "" {
-				f.issuer = "keymaster@" + domain
-				ViperSet(prefix+"issuer", f.issuer)
+			if f.Issuer == "" {
+				f.Issuer = "keymaster@" + domain
+				ViperSet(prefix+"issuer", f.Issuer)
 			}
-			if f.caURL == "" {
-				f.caURL = "https://keymaster." + domain
-				ViperSet(prefix+"ca_url", f.caURL)
+			if f.CaURL == "" {
+				f.CaURL = "https://keymaster." + domain
+				ViperSet(prefix+"ca_url", f.CaURL)
 			}
 		}
 	}
 
-	if ViperGetString(prefix+"issuer") == "" && f.issuer != "" {
-		ViperSet(prefix+"issuer", f.issuer)
-	}
-
-	if f.caURL == "" {
+	if f.CaURL == "" {
 		return nil, Fatalf("missing config: ca_url")
 	}
 
-	_, err = url.Parse(f.caURL)
+	_, err = url.Parse(f.CaURL)
 	if err != nil {
-		return nil, Fatalf("failed parsing ca_url '%s': %v", f.caURL, err)
+		return nil, Fatalf("failed parsing ca_url '%s': %v", f.CaURL, err)
 	}
 
-	if f.fingerprint == "" {
+	if ViperGetString(prefix+"ca_url") == "" {
+		ViperSet(prefix+"ca_url", f.CaURL)
+	}
+
+	if f.Fingerprint == "" {
 		return nil, Fatalf("missing config: fingerprint")
 	}
 
-	if f.rootCA == "" {
+	if ViperGetString(prefix+"fingerprint") == "" {
+		ViperSet(prefix+"fingerprint", f.Fingerprint)
+	}
+
+	if f.RootCA == "" {
 		return nil, Fatalf("missing config: root_cert")
 
 	}
 
-	if f.issuer == "" {
+	if !IsFile(f.RootCA) {
+		return nil, Fatalf("root_cert %s is not a file", f.RootCA)
+	}
+
+	if ViperGetString(prefix+"root_cert") == "" {
+		ViperSet(prefix+"root_cert", f.RootCA)
+	}
+
+	if f.Issuer == "" {
 		return nil, Fatalf("missing config: issuer")
 	}
 
-	if f.passwordFile == "" {
+	if ViperGetString(prefix+"issuer") == "" {
+		ViperSet(prefix+"issuer", f.Issuer)
+	}
+
+	if f.PasswordFile == "" {
 		return nil, Fatalf("missing config: password_file")
 
+	}
+
+	if !IsFile(f.PasswordFile) {
+		return nil, Fatalf("password_file %s is not a file", f.PasswordFile)
 	}
 
 	// add passed-in stepArgs if any
@@ -252,103 +275,112 @@ func NewCertFactory(stepArgs *[]string) (*CertFactory, error) {
 		f.StepArgs = append(f.StepArgs, *stepArgs...)
 	}
 
-	if f.debug {
-		log.Printf("NewCertFactory: %+v\n", f)
+	if f.Debug {
+		log.Printf("NewCertFactory: %s\n", FormatJSON(f))
 	}
 	return &f, nil
 }
 
-func (c *CertFactory) initFromKeymaster(keymasterFile string) (*StepConfig, error) {
+func (c *CertFactory) initFromKeymaster(keymasterFile string) error {
 	// extract the root cert from keymaster (it may be a chain)
-	rootData, err := c.runStep("certificate", "inspect", "--format=pem", keymasterFile)
-	if err != nil {
-		return nil, Fatal(err)
-	}
-	var config StepConfig
-	config.Root = filepath.Join(c.configDir, "root.pem")
-	err = os.WriteFile(config.Root, rootData, 0600)
-	if err != nil {
-		return nil, Fatal(err)
+
+	if c.RootCA == "" {
+		rootData, err := c.runStep("certificate", "inspect", "--format=pem", keymasterFile)
+		if err != nil {
+			return Fatal(err)
+		}
+		c.RootCA = filepath.Join(c.ConfigDir, "root.pem")
+		err = os.WriteFile(c.RootCA, rootData, 0600)
+		if err != nil {
+			return Fatal(err)
+		}
 	}
 
-	// read and decode the root CA as json
-	fpData, err := c.runStep("certificate", "fingerprint", config.Root)
-	if err != nil {
-		return nil, Fatal(err)
+	if c.Fingerprint == "" {
+		fpData, err := c.runStep("certificate", "fingerprint", c.RootCA)
+		if err != nil {
+			return Fatal(err)
+		}
+		c.Fingerprint = string(fpData)
 	}
-	config.Fingerprint = string(fpData)
 
-	keymasterConfigFile := filepath.Join(c.configDir, "keymaster.yaml")
+	keymasterConfigFile := filepath.Join(c.ConfigDir, "keymaster.yaml")
 	if !IsFile(keymasterConfigFile) {
 		// create keymaster config file if not present
 		err := os.WriteFile(keymasterConfigFile, []byte(defaultKeymasterConfig), 0600)
 		if err != nil {
-			return nil, Fatal(err)
+			return Fatal(err)
 		}
 	}
 	kmData, err := os.ReadFile(keymasterConfigFile)
 	if err != nil {
-		return nil, Fatal(err)
+		return Fatal(err)
 	}
 	var keymasterConfig map[string]KeymasterConfig
-
 	err = yaml.Unmarshal(kmData, &keymasterConfig)
 	if err != nil {
-		return nil, Fatalf("failed decoding: %s: %v", keymasterConfigFile, err)
+		return Fatalf("failed decoding: %s: %v", keymasterConfigFile, err)
 	}
 
-	kmcfg, ok := keymasterConfig[config.Fingerprint]
+	kmcfg, ok := keymasterConfig[c.Fingerprint]
 	if ok {
-		// assemble URL from keymaster config
-		var kmurl url.URL
-		kmurl.Scheme = "https"
-		if kmcfg.Port == 0 || kmcfg.Port == 443 {
-			kmurl.Host = kmcfg.Hostname
-		} else {
-			kmurl.Host = fmt.Sprintf("%s:%d", kmcfg.Hostname, kmcfg.Port)
+		if c.CaURL == "" {
+			// assemble URL from keymaster config
+			var kmurl url.URL
+			kmurl.Scheme = "https"
+			if kmcfg.Port == 0 || kmcfg.Port == 443 {
+				kmurl.Host = kmcfg.Hostname
+			} else {
+				kmurl.Host = fmt.Sprintf("%s:%d", kmcfg.Hostname, kmcfg.Port)
+			}
+			kmurl.Path = kmcfg.Path
+			// test for valid URL
+			c.CaURL = kmurl.String()
 		}
-		kmurl.Path = kmcfg.Path
-		config.URL = kmurl.String()
-		// test for valid URL
-		_, err = url.Parse(config.URL)
-		if err != nil {
-			return nil, Fatalf("failed parsing keymaster config URL %s: %v", config.URL, err)
-		}
-		// side-effect: set issuer if unset
-		if c.issuer == "" {
-			c.issuer = kmcfg.Issuer
-		}
-		return &config, nil
-	}
-	Warning("keymaster fingerprint %s not found in %s", config.Fingerprint, keymasterConfigFile)
-	return nil, nil
 
+		if c.Issuer == "" {
+			c.Issuer = kmcfg.Issuer
+		}
+		return nil
+	}
+	Warning("fingerprint %s not found in %s", c.Fingerprint, keymasterConfigFile)
+	return nil
 }
 
-func (c *CertFactory) readStepConfig() (*StepConfig, error) {
+func (c *CertFactory) initFromStepConfig() error {
 	stdout, err := c.runStep("path")
 	if err != nil {
-		return nil, Fatal(err)
+		return Fatalf("failed getting step config path: %v", err)
 	}
-	stepPath := string(stdout)
-	if stepPath == "" || !IsDir(stepPath) {
-		return nil, nil
+	cfgPath := string(stdout)
+	if cfgPath == "" || !IsDir(cfgPath) {
+		Warning("no step config found")
+		return nil
 	}
-	stepConfig := filepath.Join(stepPath, "config", "defaults.json")
-	data, err := os.ReadFile(stepConfig)
+	stepConfigFile := filepath.Join(cfgPath, "config", "defaults.json")
+	data, err := os.ReadFile(stepConfigFile)
 	if err != nil {
-		return nil, Fatal(err)
+		return Fatal(err)
 	}
 	var config StepConfig
 	err = json.Unmarshal(data, &config)
 	if err != nil {
-		return nil, Fatalf("failed parsing step config: %v", err)
+		return Fatalf("failed parsing step config %s: %v", stepConfigFile, err)
 	}
-	return &config, nil
+	if c.CaURL == "" {
+		c.CaURL = config.URL
+	}
+	if c.Fingerprint == "" {
+		c.Fingerprint = config.Fingerprint
+	}
+	if c.RootCA == "" {
+		c.RootCA = config.Root
+	}
+	return nil
 }
 
 func (c *CertFactory) SetKeyType(keyType KeyType) {
-	c.keyType = keyType
+	c.KeyType = keyType
 }
 
 func (c *CertFactory) Root(pathname string) (string, error) {
@@ -362,8 +394,8 @@ func (c *CertFactory) Root(pathname string) (string, error) {
 	args := []string{
 		"ca", "root",
 		"--force",
-		"--ca-url", c.caURL,
-		"--fingerprint", c.fingerprint,
+		"--ca-url", c.CaURL,
+		"--fingerprint", c.Fingerprint,
 		certFile,
 	}
 	args = append(args, c.StepArgs...)
@@ -502,7 +534,7 @@ func (c *CertFactory) CertificatePair(subjectName, duration, certFile, keyFile s
 		return "", "", err
 	}
 
-	data, err := os.ReadFile(c.rootCA)
+	data, err := os.ReadFile(c.RootCA)
 	if err != nil {
 		return "", "", err
 	}
@@ -510,41 +542,43 @@ func (c *CertFactory) CertificatePair(subjectName, duration, certFile, keyFile s
 	pool := x509.NewCertPool()
 	ok := pool.AppendCertsFromPEM(data)
 	if !ok {
-		return "", "", Fatalf("failed reading rootCA: %s", c.rootCA)
+		return "", "", Fatalf("failed reading rootCA: %s", c.RootCA)
 	}
 
 	cmdArgs = []string{
 		"ca", "certificate",
 		subjectName, certFile, keyFile,
-		fmt.Sprintf("--ca-url=%s", c.caURL),
-		fmt.Sprintf("--root=%s", c.rootCA),
-		fmt.Sprintf("--issuer=%s", c.issuer),
-		fmt.Sprintf("--provisioner-password-file=%s", c.passwordFile),
+		fmt.Sprintf("--ca-url=%s", c.CaURL),
+		fmt.Sprintf("--root=%s", c.RootCA),
+		fmt.Sprintf("--issuer=%s", c.Issuer),
+		fmt.Sprintf("--provisioner-password-file=%s", c.PasswordFile),
 	}
-	/*
-		fmt.Sprintf("--fingerprint=%s", c.fingerprint),
-	*/
 
+	notBefore := time.Now()
+	var notAfter time.Time
 	switch {
 	case duration == "":
+		lifetime, err := time.ParseDuration(c.DefaultDuration)
+		if err != nil {
+			return "", "", Fatal(err)
+		}
+		notAfter = time.Now().Add(lifetime)
 	case strings.HasSuffix(duration, "y") || strings.HasSuffix(duration, "d"):
-		d, err := expirationDate(duration)
+		notAfter, err = expirationDate(duration)
 		if err != nil {
 			return "", "", err
 		}
-		duration = d
 	default:
-		d, err := time.ParseDuration(duration)
+		lifetime, err := time.ParseDuration(duration)
 		if err != nil {
 			return "", "", err
 		}
-		duration = d.String()
+		notAfter = time.Now().Add(lifetime)
 	}
-	if duration != "" {
-		cmdArgs = append(cmdArgs, fmt.Sprintf("--not-after=%s", duration))
-	}
+	cmdArgs = append(cmdArgs, fmt.Sprintf("--not-before=%s", notBefore.Format(time.RFC3339)))
+	cmdArgs = append(cmdArgs, fmt.Sprintf("--not-after=%s", notAfter.Format(time.RFC3339)))
 
-	switch c.keyType {
+	switch c.KeyType {
 	case KeyTypeECURVE:
 		cmdArgs = append(cmdArgs, "--kty=EC")
 	case KeyTypeED25519:
@@ -552,7 +586,7 @@ func (c *CertFactory) CertificatePair(subjectName, duration, certFile, keyFile s
 	case KeyTypeRSA:
 		cmdArgs = append(cmdArgs, "--kty=RSA")
 	default:
-		return "", "", fmt.Errorf("unexpected certificate type: %v", c.keyType)
+		return "", "", fmt.Errorf("unexpected certificate type: %v", c.KeyType)
 	}
 
 	cmdArgs = append(cmdArgs, c.StepArgs...)
@@ -567,14 +601,14 @@ func (c *CertFactory) CertificatePair(subjectName, duration, certFile, keyFile s
 
 func (c *CertFactory) runStep(cmdArgs ...string) ([]byte, error) {
 
-	//if c.debug {
+	//if c.Debug {
 	//fmt.Fprintf(os.Stderr, "runStep('%s')\n", strings.Join(cmdArgs, "', '"))
 	//}
 
 	obuf := bytes.Buffer{}
 	ebuf := bytes.Buffer{}
 
-	stepCmd := exec.Command(c.stepBinary, cmdArgs...)
+	stepCmd := exec.Command(c.StepBinary, cmdArgs...)
 
 	if c.Raw {
 		stepCmd.Stdout = os.Stdout
@@ -584,7 +618,7 @@ func (c *CertFactory) runStep(cmdArgs ...string) ([]byte, error) {
 		stepCmd.Stderr = &ebuf
 	}
 
-	if c.verbose || c.debug {
+	if c.Verbose || c.Debug {
 		log.Printf("spawning: '%s'\n", stepCmd.String())
 	}
 
@@ -601,8 +635,8 @@ func (c *CertFactory) runStep(cmdArgs ...string) ([]byte, error) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		timer := time.NewTimer(time.Duration(c.stepTimeoutSeconds) * time.Second)
-		if c.debug {
+		timer := time.NewTimer(time.Duration(c.StepTimeoutSeconds) * time.Second)
+		if c.Debug {
 			log.Println("timer: starting")
 			defer log.Println("timer: exiting")
 		}
@@ -611,7 +645,7 @@ func (c *CertFactory) runStep(cmdArgs ...string) ([]byte, error) {
 		for {
 			select {
 			case <-timer.C:
-				if c.debug {
+				if c.Debug {
 					log.Println("timer: timer expired")
 				}
 				err := stepCmd.Process.Kill()
@@ -620,7 +654,7 @@ func (c *CertFactory) runStep(cmdArgs ...string) ([]byte, error) {
 					return
 				}
 			case err := <-exitChan:
-				if c.debug {
+				if c.Debug {
 					log.Printf("timer: exitChan emitted: %v\n", err)
 				}
 				errChan <- err
@@ -632,17 +666,17 @@ func (c *CertFactory) runStep(cmdArgs ...string) ([]byte, error) {
 
 	wg.Add(1)
 	go func() {
-		if c.debug {
+		if c.Debug {
 			log.Println("waiter: starting")
 			defer log.Println("waiter: exiting")
 		}
 		defer wg.Done()
 		var exitCode int
-		if c.debug {
+		if c.Debug {
 			log.Println("waiter: waiting on command")
 		}
 		err := stepCmd.Wait()
-		if c.debug {
+		if c.Debug {
 			log.Printf("waiter: command wait returned: %v\n", err)
 		}
 		if err != nil {
@@ -663,32 +697,32 @@ func (c *CertFactory) runStep(cmdArgs ...string) ([]byte, error) {
 		exitChan <- nil
 	}()
 
-	if c.debug {
+	if c.Debug {
 		log.Println("runStep: waiting on goprocs...")
 	}
 	wg.Wait()
-	if c.debug {
+	if c.Debug {
 		log.Println("runStep: goprocs complete")
 	}
 
 	stdout := strings.TrimSpace(obuf.String())
-	if (c.verbose || c.TTY) && stdout != "" {
+	if (c.Verbose || c.TTY) && stdout != "" {
 		fmt.Printf("%s\n", ttyFormat(stdout))
 	}
 
 	stderr := strings.TrimSpace(ebuf.String())
-	if (c.verbose || c.TTY) && stderr != "" {
+	if (c.Verbose || c.TTY) && stderr != "" {
 		fmt.Fprintf(os.Stderr, "%s\n", ttyFormat(stderr))
 	}
 
-	if c.debug {
+	if c.Debug {
 		log.Println("runStep: reading errChan...")
 	}
 	err = nil
 	for done := false; !done; {
 		select {
 		case e := <-errChan:
-			if c.debug {
+			if c.Debug {
 				log.Printf("runStep: errChan emitted %v\n", e)
 			}
 			if e != nil {
@@ -698,7 +732,7 @@ func (c *CertFactory) runStep(cmdArgs ...string) ([]byte, error) {
 			done = true
 		}
 	}
-	if c.debug {
+	if c.Debug {
 		log.Printf("runStep: errChan drained, err=%v\n", err)
 	}
 
@@ -710,22 +744,24 @@ func ttyFormat(s string) string {
 	return strings.TrimSpace(emojiPattern.ReplaceAllString(s, ""))
 }
 
-func expirationDate(duration string) (string, error) {
-	if len(duration) == 0 {
-		return "", fmt.Errorf("invalid duration: '%v'", duration)
+func expirationDate(duration string) (time.Time, error) {
+	m := regexp.MustCompile(`^([0-9]+)([dy])$`).FindStringSubmatch(duration)
+	if len(m) != 3 {
+		return time.Time{}, fmt.Errorf("invalid duration: '%v'", duration)
 	}
-	unit := string([]rune(duration)[len(duration)-1])
-	duration = string([]rune(duration)[:len(duration)-1])
-	days, err := strconv.Atoi(duration)
+	days, err := strconv.Atoi(m[1])
 	if err != nil {
-		return "", err
+		return time.Time{}, err
 	}
-	if unit == "y" {
+	switch m[2] {
+	case "d":
+	case "y":
 		days = days * 365
+	default:
+		return time.Time{}, Fatalf("unexpected duration suffix: %s", m[2])
 	}
-	now := time.Now()
-	expiration := now.AddDate(0, 0, days)
-	return expiration.Format(time.RFC3339), nil
+	expiration := time.Now().AddDate(0, 0, days)
+	return expiration, nil
 }
 
 func (c *CertFactory) checkOutputFile(pathname string) error {

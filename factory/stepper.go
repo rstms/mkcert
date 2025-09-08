@@ -16,11 +16,7 @@ var linuxStep []byte
 //go:embed bin/openbsd_step
 var openbsdStep []byte
 
-func InstallStepBinary() (string, error) {
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		return "", Fatal(err)
-	}
+func (c *CertFactory) installStepBinary() (string, error) {
 	var stepData []byte
 	stepName := "step"
 	switch runtime.GOOS {
@@ -34,13 +30,8 @@ func InstallStepBinary() (string, error) {
 	default:
 		return "", Fatalf("unsupported OS: %s", runtime.GOOS)
 	}
-	stepDir := filepath.Join(cacheDir, "mkcert")
-	err = os.MkdirAll(stepDir, 0700)
-	if err != nil {
-		return "", Fatal(err)
-	}
-	stepBin := filepath.Join(stepDir, stepName)
-	err = os.WriteFile(stepBin, stepData, 0700)
+	stepBin := filepath.Join(c.CacheDir, stepName)
+	err := os.WriteFile(stepBin, stepData, 0700)
 	if err != nil {
 		return "", Fatal(err)
 	}

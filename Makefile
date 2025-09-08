@@ -58,6 +58,7 @@ step-binaries:
 clean:
 	rm -f $(program) $(program).exe *.core *.pem *.key
 	go clean
+	@$(foreach d,config cache certs,rm -rf factory/testdata/$(d) && mkdir -p factory/testdata/$(d) && touch factory/testdata/$(d)/.placeholder;)
 
 sterile: clean
 	which $(program) && go clean -i || true

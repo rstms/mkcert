@@ -4,3 +4,6 @@ notes
 .postactivate
 *.pem
 *.key
+factory/testdata/config
+factory/testdata/cache
+factory/testdata/certs

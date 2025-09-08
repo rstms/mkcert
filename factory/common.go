@@ -65,6 +65,10 @@ func ProgramVersion() string {
 	return common.ProgramVersion()
 }
 
+func ConfigDir() string {
+	return common.ConfigDir()
+}
+
 func CheckErr(err error) {
 	common.CheckErr(err)
 }
@@ -125,8 +129,8 @@ func NewSendmail(hostname string, port int, username, password, CAFile string) (
 	return common.NewSendmail(hostname, port, username, password, CAFile)
 }
 
-func Expand(pathname string) string {
-	return common.Expand(pathname)
+func Expand(value string) string {
+	return common.Expand(value)
 }
 
 func ViperKey(key string) string {

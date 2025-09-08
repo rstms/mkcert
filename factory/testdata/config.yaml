@@ -1,0 +1,5 @@
+test:
+  mkcert: 
+    verbose: true
+    debug: true
+    password_file: ${TEST_PASSWORD_FILE}
