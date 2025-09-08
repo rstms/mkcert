@@ -42,7 +42,7 @@ import (
 	"time"
 )
 
-const Version = "0.2.11"
+const Version = "0.2.12"
 
 //go:embed default_keymaster_config.yaml
 var defaultKeymasterConfig string
