@@ -96,7 +96,7 @@ The --rootCA flag writes the root CA cert to a file named by SUBJECT.
 			cobra.CheckErr(err)
 			fmt.Println(certFile)
 		case ViperGetBool("hash"):
-			hash, err := certFactory.Hash(subject)
+			hash, err := factory.CertHash(subject)
 			cobra.CheckErr(err)
 			fmt.Println(hash)
 		default:
