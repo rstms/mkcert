@@ -42,7 +42,7 @@ var cfgFile string
 var certFactory *factory.CertFactory
 
 var rootCmd = &cobra.Command{
-	Version: "0.2.13",
+	Version: "0.2.14",
 	Use:     "mkcert [flags] SUBJECT [-- STEP-OPTS]",
 	Short:   "make client certificate",
 	Long: `
