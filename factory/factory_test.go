@@ -70,7 +70,7 @@ func TestFactoryHash(t *testing.T) {
 	outFile, err := f.Root(certFile)
 	require.Nil(t, err)
 	require.Equal(t, certFile, outFile)
-	hash, err := f.Hash(certFile)
+	hash, err := CertHash(certFile)
 	require.Nil(t, err)
 	match := regexp.MustCompile("^[a-fA-F0-9]{8}$").MatchString(hash)
 	require.True(t, match)
