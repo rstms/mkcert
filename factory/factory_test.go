@@ -2,11 +2,9 @@ package factory
 
 import (
 	"github.com/stretchr/testify/require"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"testing"
 )
 
@@ -57,22 +55,4 @@ func TestFactoryKeypair(t *testing.T) {
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
 	require.Nil(t, err)
-}
-
-func TestFactoryHash(t *testing.T) {
-	f := initFactory(t)
-	require.NotNil(t, f)
-	certFile := filepath.Join("testdata", "certs", "hashroot.pem")
-	if IsFile(certFile) {
-		err := os.Remove(certFile)
-		require.Nil(t, err)
-	}
-	outFile, err := f.Root(certFile)
-	require.Nil(t, err)
-	require.Equal(t, certFile, outFile)
-	hash, err := CertHash(certFile)
-	require.Nil(t, err)
-	match := regexp.MustCompile("^[a-fA-F0-9]{8}$").MatchString(hash)
-	require.True(t, match)
-	log.Printf("hash=%s\n", hash)
 }

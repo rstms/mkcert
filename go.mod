@@ -3,6 +3,7 @@ module github.com/rstms/mkcert
 go 1.24.5
 
 require (
+	github.com/go-asn1-ber/asn1-ber v1.5.7
 	github.com/rstms/go-common v0.2.33
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
